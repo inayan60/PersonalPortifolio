@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  # Serviço Vaultwarden
+  vaultwarden:
+    image: vaultwarden/server:latest
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    volumes:
+      - /opt/your-stack-name/vw-data:/data
+    environment:
+      ADMIN_TOKEN: /run/secrets/vw_admin_token # Token de administração do Vaultwarden
+    secrets:
+      - vw_admin_token
+    networks:
+      - your_stack_net
+    ports: # Descomente e ajuste as portas se não usar proxy reverso
+      - "8080:80"
+
+  # Serviço de Banco de Dados PostgreSQL para Guacamole
+  guacamole-db:
+    image: postgres:13
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    environment:
+      POSTGRES_DB: guacamole_db
+      POSTGRES_USER: guacamole_user
+      POSTGRES_PASSWORD_FILE: /run/secrets/guac_postgres_password # Senha do usuário DB
+    volumes:
+      - /opt/your-stack-name/guac-db-data:/var/lib/postgresql/data
+      - /opt/your-stack-name/guac-initdb:/docker-entrypoint-initdb.d # Inicialização do schema
+    secrets:
+      - guac_postgres_password
+    networks:
+      - your_stack_net
+
+  # Serviço Guacamole
+  guacamole:
+    image: guacamole/guacamole:latest
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    environment:
+      GUAC_HOME: /opt/guacamole/home
+      # Variável de ambiente para a senha de bind LDAP, lida do Docker Secret
+      LDAP_SEARCH_BIND_PASSWORD: /run/secrets/guac_ldap_bind_password
+    volumes:
+      - /opt/your-stack-name/guac-conf:/opt/guacamole/home # Arquivo guacamole.properties
+      - /opt/your-stack-name/guac-drive:/guacd-drive
+      - /opt/your-stack-name/guac-recordings:/recordings
+    secrets:
+      - guac_ldap_bind_password
+    networks:
+      - your_stack_net
+    ports: # Descomente e ajuste as portas se não usar proxy reverso
+      - "8081:8080"
+
+  # Serviço Portainer
+  portainer:
+    image: portainer/portainer-ce:latest
+    command: -H unix:///var/run/docker.sock --tlsskipverify --admin-password-file /run/secrets/portainer_admin_password
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/your-stack-name/portainer-data:/data
+    secrets:
+      - portainer_admin_password
+    networks:
+      - your_stack_net
+    ports: # Descomente e ajuste as portas se não usar proxy reverso
+      - "9000:9000"
+
+secrets:
+  vw_admin_token:
+    external: true
+  guac_postgres_password:
+    external: true
+  guac_ldap_bind_password:
+    external: true
+  portainer_admin_password:
+    external: true
+
+networks:
+  your_stack_net:
+    external: true
